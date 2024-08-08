@@ -29,17 +29,18 @@ def main(input_pkl_file_path):
             # import pdb; pdb.set_trace()
         data_to_save = {}
         for key, tensor_list in data.items():
-            print(key, len(tensor_list))
+            print(key, np.array(tensor_list).shape)
             
-            data_to_save[key] = torch.stack(torch.from_numpy(np.array(tensor_list))).numpy()
+            data_to_save[key] = np.array(tensor_list)
         # import pdb; pdb.set_trace()
-        u = data_to_save["rdda_right_act"]
-        spline_params = data_to_save["right_operator_pose"]
+        ## action_space
+        u = data_to_save["u"]
+        spline_params = data_to_save["spline_params"]
 
 
         # Stack the arrays along the 0th dimension
         data_to_save["action"] = np.concatenate([u, # 1
-                                            spline_params.squeeze(0), # 10
+                                            spline_params[:,0,:], # 10
                                             ], axis=1)
 
         del data
@@ -49,7 +50,7 @@ def main(input_pkl_file_path):
         #         del data_to_save[key]
 
         # Add processed data to replay buffer
-        assert len(set(data_to_save.keys()))== len(data_to_save.keys()) 
+        # assert len(set(data_to_save.keys()))== len(data_to_save.keys()) 
         # import pdb; pdb.set_trace()
         replay_buffer.add_episode(data_to_save, compressors='disk')
         print("Added data from pkl file to Zarr: %s" % pkl_file)
