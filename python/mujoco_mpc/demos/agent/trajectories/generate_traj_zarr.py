@@ -34,20 +34,28 @@ def main(input_pkl_file_path):
             data_to_save[key] = np.array(tensor_list)
         # import pdb; pdb.set_trace()
         ## action_space
+
+        pos = data_to_save["pos"]
+        vel = data_to_save["vel"]
         u = data_to_save["u"]
         spline_params = data_to_save["spline_params"]
 
 
         # Stack the arrays along the 0th dimension
+        data_to_save["obs"] = np.concatenate([pos, #2 
+                                             vel, #2
+                                             spline_params[:,0,:], #10 
+                                             ], axis = 1)
+        
         data_to_save["action"] = np.concatenate([u, # 1
                                             spline_params[:,0,:], # 10
                                             ], axis=1)
 
         del data
-        # keys_to_delete = ["rdda_right_act", "right_operator_pose", "rdda_left_act", "left_operator_pose"]
-        # for key in keys_to_delete:
-        #     if key in data_to_save:
-        #         del data_to_save[key]
+        keys_to_delete = ["pos", "vel", "u", "spline_params"]
+        for key in keys_to_delete:
+            if key in data_to_save:
+                del data_to_save[key]
 
         # Add processed data to replay buffer
         # assert len(set(data_to_save.keys()))== len(data_to_save.keys()) 

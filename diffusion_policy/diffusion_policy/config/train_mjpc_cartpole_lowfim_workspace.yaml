@@ -1,28 +1,8 @@
 defaults:
   - _self_
 
-obs_dim: 20 # 9*2 keypoints + 2 state
-action_dim: 1
-keypoint_dim: 2
-
-# env_runner:
-#   _target_: diffusion_policy.env_runner.pusht_keypoints_runner.PushTKeypointsRunner
-#   keypoint_visible_rate: ${keypoint_visible_rate}
-#   n_train: 6
-#   n_train_vis: 2
-#   train_start_seed: 0
-#   n_test: 50
-#   n_test_vis: 4
-#   legacy_test: True
-#   test_start_seed: 100000
-#   max_steps: 300
-#   n_obs_steps: ${n_obs_steps}
-#   n_action_steps: ${n_action_steps}
-#   n_latency_steps: ${n_latency_steps}
-#   fps: 10
-#   agent_keypoints: False
-#   past_action: ${past_action_visible}
-#   n_envs: null
+obs_dim: 14 # spline(11) + pos(2) + vel(2)
+action_dim: 11 # u(1) + spline(11)
 
 dataset:
   _target_: diffusion_policy.dataset.pusht_dataset.PushTLowdimDataset
