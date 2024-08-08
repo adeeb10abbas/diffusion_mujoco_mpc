@@ -19,6 +19,8 @@ import mujoco
 import numpy as np
 import os
 import pathlib
+import torch
+# torch.save(dict_to_save, "cartpole_trajectories.pt")
 
 os.environ["MUJOCO_GL"] = "glfw"
 
@@ -74,111 +76,132 @@ mujoco.mj_resetData(model, data)
 qpos[:, 0] = data.qpos
 qvel[:, 0] = data.qvel
 time[0] = data.time
-
 # frames
 frames = []
 FPS = 1.0 / model.opt.timestep
+dict_to_save = []
 
 # simulate
-for t in range(T - 1):
-    if t % 100 == 0:
-        print("t = ", t)
+NUM_TRAJ = 20
 
-    # set planner state
-    agent.set_state(
-        time=data.time,
-        qpos=data.qpos,
-        qvel=data.qvel,
-        act=data.act,
-        mocap_pos=data.mocap_pos,
-        mocap_quat=data.mocap_quat,
-        userdata=data.userdata,
-    )
+for traj_id in range(NUM_TRAJ):
 
-    # run planner for num_steps
-    num_steps = 1
-    for _ in range(num_steps):
-        agent.planner_step()
+    positions = []
+    vels = []
+    spline_params = []
+    u = []
 
-    # set ctrl from agent policy
-    data.ctrl = agent.get_action()
-    ctrl[:, t] = data.ctrl
+    for t in range(T - 1):
+        if t % 100 == 0:
+            print(f"Trajectory {traj_id}, t = {t}")
 
-    # set policy parameters
-    ### NEW BINDING ###
-    policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
-    ###################
+        # set planner state
+        agent.set_state(
+            time=data.time,
+            qpos=data.qpos,
+            qvel=data.qvel,
+            act=data.act,
+            mocap_pos=data.mocap_pos,
+            mocap_quat=data.mocap_quat,
+            userdata=data.userdata,
+        )
 
-    # get costs
-    cost_total[t] = agent.get_total_cost()
-    for i, c in enumerate(agent.get_cost_term_values().items()):
-        cost_terms[i, t] = c[1]
+        # run planner for num_steps
+        num_steps = 1
+        for _ in range(num_steps):
+            agent.planner_step()
 
-    # step
-    mujoco.mj_step(model, data)
+        # set ctrl from agent policy
+        data.ctrl = agent.get_action()
+        ctrl[:, t] = data.ctrl
 
-    # cache
-    qpos[:, t + 1] = data.qpos
-    qvel[:, t + 1] = data.qvel
-    time[t + 1] = data.time
+        # set policy parameters
+        ### NEW BINDING ###
+        policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
+        ###################
 
-    # render and save frames
-    renderer.update_scene(data)
-    pixels = renderer.render()
-    frames.append(pixels)
+        # Append data to lists
+        positions.append(data.qpos.copy())
+        vels.append(data.qvel.copy())
+        spline_params.append(policy_parameters[:, :, t].copy())
+        u.append(data.ctrl.copy())
 
-    # Store current poli
+        # get costs
+        cost_total[t] = agent.get_total_cost()
+        for i, c in enumerate(agent.get_cost_term_values().items()):
+            cost_terms[i, t] = c[1]
 
-# reset
-agent.reset()
+        # step
+        mujoco.mj_step(model, data)
+
+        # cache
+        qpos[:, t + 1] = data.qpos
+        qvel[:, t + 1] = data.qvel
+        time[t + 1] = data.time
+
+        # render and save frames
+        renderer.update_scene(data)
+        pixels = renderer.render()
+        frames.append(pixels)
+
+    # Save trajectory data
+    torch.save({
+        "pos": positions,
+        "vel": vels,
+        "spline_params": spline_params,
+        "u": u
+    }, f"trajectories/cartpole_traj_{traj_id}.pkl")
+
+    # reset
+    agent.reset()
 
 #### NEW BINDING ####
 
 
-# display video
-SLOWDOWN = 0.5
-media.show_video(frames, fps=SLOWDOWN * FPS)
+# # display video
+# SLOWDOWN = 0.5
+# media.show_video(frames, fps=SLOWDOWN * FPS)
 
-# %%
-# plot position
-fig = plt.figure()
+# # %%
+# # plot position
+# fig = plt.figure()
 
-plt.plot(time, qpos[0, :], label="q0", color="blue")
-plt.plot(time, qpos[1, :], label="q1", color="orange")
+# plt.plot(time, qpos[0, :], label="q0", color="blue")
+# plt.plot(time, qpos[1, :], label="q1", color="orange")
 
-plt.legend()
-plt.xlabel("Time (s)")
-plt.ylabel("Configuration")
+# plt.legend()
+# plt.xlabel("Time (s)")
+# plt.ylabel("Configuration")
 
-# %%
-# plot velocity
-fig = plt.figure()
+# # %%
+# # plot velocity
+# fig = plt.figure()
 
-plt.plot(time, qvel[0, :], label="v0", color="blue")
-plt.plot(time, qvel[1, :], label="v1", color="orange")
+# plt.plot(time, qvel[0, :], label="v0", color="blue")
+# plt.plot(time, qvel[1, :], label="v1", color="orange")
 
-plt.legend()
-plt.xlabel("Time (s)")
-plt.ylabel("Velocity")
+# plt.legend()
+# plt.xlabel("Time (s)")
+# plt.ylabel("Velocity")
 
-# %%
-# plot control
-fig = plt.figure()
+# # %%
+# # plot control
+# fig = plt.figure()
 
-plt.plot(time[:-1], ctrl[0, :], color="blue")
+# plt.plot(time[:-1], ctrl[0, :], color="blue")
 
-plt.xlabel("Time (s)")
-plt.ylabel("Control")
+# plt.xlabel("Time (s)")
+# plt.ylabel("Control")
 
-# %%
-# plot costs
-fig = plt.figure()
+# # %%
+# # plot costs
+# fig = plt.figure()
 
-for i, c in enumerate(agent.get_cost_term_values().items()):
-    plt.plot(time[:-1], cost_terms[i, :], label=c[0])
+# for i, c in enumerate(agent.get_cost_term_values().items()):
+#     plt.plot(time[:-1], cost_terms[i, :], label=c[0])
 
-plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black")
+# plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black")
 
-plt.legend()
-plt.xlabel("Time (s)")
-plt.ylabel("Costs")
+# plt.legend()
+# plt.xlabel("Time (s)")
+# plt.ylabel("Costs")
