@@ -74,13 +74,7 @@ class MJPCLowdimDataset(BaseLowdimDataset):
         return len(self.sampler)
 
     def _sample_to_data(self, sample):
-        keypoint = sample[self.obs_key]
-        state = sample[self.state_key]
-        agent_pos = state[:,:2]
-        obs = np.concatenate([
-            keypoint.reshape(keypoint.shape[0], -1), 
-            agent_pos], axis=-1)
-
+        obs = sample[self.obs_key]
         data = {
             'obs': obs, # T, D_o
             'action': sample[self.action_key], # T, D_a

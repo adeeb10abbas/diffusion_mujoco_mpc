@@ -1,55 +1,42 @@
 defaults:
   - _self_
+  - task: mjpc_lowdim
 
-obs_dim: 14 # spline(11) + pos(2) + vel(2)
-action_dim: 11 # u(1) + spline(11)
+# task_name: ${task.name}
+# shape_meta: ${task.shape_meta}
+# exp_name: "default"
 
-dataset:
-  _target_: diffusion_policy.dataset.pusht_dataset.PushTLowdimDataset
-  zarr_path: /home/ali/super_isolated/mujoco_mpc/python/mujoco_mpc/demos/agent/trajectories/pkls/_replay_buffer.zarr
-  horizon: ${horizon}
-  pad_before: ${eval:'${n_obs_steps}-1+${n_latency_steps}'}
-  pad_after: ${eval:'${n_action_steps}-1'}
-  seed: 42
-  val_ratio: 0.02
-  max_train_episodes: 90
-
-name: train_diffusion_transformer_lowdim
-_target_: diffusion_policy.workspace.train_diffusion_transformer_lowdim_workspace.TrainDiffusionTransformerLowdimWorkspace
+name: train_diffusion_unet_lowdim
+_target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace.TrainDiffusionUnetLowdimWorkspace
 
 task_name: "mjpc_cartpole_dp_transformer"
 exp_name: "overfit_task"
-
+obs_dim: ${task.obs_dim}
+action_dim: ${task.action_dim}
+# task: "some"
 horizon: 16
 n_obs_steps: 2
 n_action_steps: 8
 n_latency_steps: 0
 past_action_visible: False
 keypoint_visible_rate: 1.0
-obs_as_cond: True
+obs_as_local_cond: False
+obs_as_global_cond: True
 pred_action_steps_only: False
 
 policy:
-  _target_: diffusion_policy.policy.diffusion_transformer_lowdim_policy.DiffusionTransformerLowdimPolicy
+  _target_: diffusion_policy.policy.diffusion_unet_lowdim_policy.DiffusionUnetLowdimPolicy
 
   model:
-    _target_: diffusion_policy.model.diffusion.transformer_for_diffusion.TransformerForDiffusion
-    input_dim: ${eval:'${action_dim} if ${obs_as_cond} else ${obs_dim} + ${action_dim}'}
-    output_dim: ${policy.model.input_dim}
-    horizon: ${horizon}
-    n_obs_steps: ${n_obs_steps}
-    cond_dim: ${eval:'${obs_dim} if ${obs_as_cond} else 0'}
-
-    n_layer: 8
-    n_head: 4
-    n_emb: 256
-    p_drop_emb: 0.0
-    p_drop_attn: 0.01
-
-    causal_attn: True
-    time_as_cond: True # if false, use BERT like encoder only arch, time as input
-    obs_as_cond: ${obs_as_cond}
-    n_cond_layers: 0 # >0: use transformer encoder for cond, otherwise use MLP
+    _target_: diffusion_policy.model.diffusion.conditional_unet1d.ConditionalUnet1D
+    input_dim: "${eval: ${task.action_dim} if ${obs_as_local_cond} or ${obs_as_global_cond} else ${task.obs_dim} + ${task.action_dim}}"
+    local_cond_dim: "${eval: ${task.obs_dim} if ${obs_as_local_cond} else None}"
+    global_cond_dim: "${eval: ${task.obs_dim}*${n_obs_steps} if ${obs_as_global_cond} else None}"
+    diffusion_step_embed_dim: 256
+    down_dims: [256, 512, 1024]
+    kernel_size: 5
+    n_groups: 8
+    cond_predict_scale: True
   
   noise_scheduler:
     _target_: diffusers.schedulers.scheduling_ddpm.DDPMScheduler
@@ -64,14 +51,18 @@ policy:
   horizon: ${horizon}
   obs_dim: ${obs_dim}
   action_dim: ${action_dim}
-  n_action_steps: ${n_action_steps}
+  n_action_steps: ${eval:'${n_action_steps}+${n_latency_steps}'}
   n_obs_steps: ${n_obs_steps}
   num_inference_steps: 100
-  obs_as_cond: ${obs_as_cond}
+  obs_as_local_cond: ${obs_as_local_cond}
+  obs_as_global_cond: ${obs_as_global_cond}
   pred_action_steps_only: ${pred_action_steps_only}
+  oa_step_convention: True
+
 
   # scheduler.step params
   # predict_epsilon: True
+
 
 ema:
   _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
@@ -96,9 +87,11 @@ val_dataloader:
   persistent_workers: False
 
 optimizer:
-  learning_rate: 1.0e-4
-  weight_decay: 1.0e-1
-  betas: [0.9, 0.95]
+  _target_: torch.optim.AdamW
+  lr: 1.0e-4
+  betas: [0.95, 0.999]
+  eps: 1.0e-8
+  weight_decay: 1.0e-6
 
 training:
   device: "cuda:0"
@@ -107,9 +100,8 @@ training:
   resume: True
   # optimization
   lr_scheduler: cosine
-  # Transformer needs LR warmup
-  lr_warmup_steps: 1000
-  num_epochs: 8000
+  lr_warmup_steps: 500
+  num_epochs: 5000
   gradient_accumulate_every: 1
   use_ema: True
   # training loop control
