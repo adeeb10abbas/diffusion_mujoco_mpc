@@ -82,7 +82,7 @@ FPS = 1.0 / model.opt.timestep
 dict_to_save = []
 
 # simulate
-NUM_TRAJ = 20
+NUM_TRAJ = 10
 
 for traj_id in range(NUM_TRAJ):
 
