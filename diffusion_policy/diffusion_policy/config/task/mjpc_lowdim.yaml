@@ -1,6 +1,6 @@
 name: mjpc_lowdim
 obs_dim: 14 # spline(11) + pos(2) + vel(2)
-action_dim: 11 # u(1) + spline(11)
+action_dim: 11 # u(1) + spline(10)
 
 dataset:
   _target_: diffusion_policy.dataset.mjpc_lowdim_dataset.MJPCLowdimDataset
