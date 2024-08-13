@@ -1,91 +1,49 @@
-# Copyright 2022 DeepMind Technologies Limited
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# %%
-import matplotlib.pyplot as plt
-import mediapy as media
+import multiprocessing as mp
 import mujoco
 import numpy as np
 import os
 import pathlib
 import torch
-# torch.save(dict_to_save, "cartpole_trajectories.pt")
+import gc
 
 os.environ["MUJOCO_GL"] = "glfw"
 
-# set current directory: mujoco_mpc/python/mujoco_mpc
 from mujoco_mpc import agent as agent_lib
+import os
+def run_trajectory(traj_id, T, NUM_KNOT_POINTS, model_path):
+    # model
+    model = mujoco.MjModel.from_xml_path(str(model_path))
 
-# %matplotlib inline
+    # data
+    data = mujoco.MjData(model)
 
-# %%
-# model
-model_path = pathlib.Path(__file__).parent.parent.parent / "../../build/mjpc/tasks/cartpole/task.xml"
-model = mujoco.MjModel.from_xml_path(str(model_path))
+    # agent
+    agent = agent_lib.Agent(task_id="Cartpole", model=model)
 
-# data
-data = mujoco.MjData(model)
+    # weights
+    agent.set_cost_weights({"Velocity": 0.15})
 
-# renderer
-renderer = mujoco.Renderer(model)
+    # parameters
+    agent.set_task_parameter("Goal", -1.0)
 
-# %%
-# agent
-agent = agent_lib.Agent(task_id="Cartpole", model=model)
+    # Initialize arrays
+    qpos = np.zeros((model.nq, T))
+    qvel = np.zeros((model.nv, T))
+    ctrl = np.zeros((model.nu, T - 1))
+    policy_parameters = np.zeros((model.nu, NUM_KNOT_POINTS, T - 1))
+    time = np.zeros(T)
+    cost_total = np.zeros(T - 1)
+    cost_terms = np.zeros((len(agent.get_cost_term_values()), T - 1))
 
-# weights
-agent.set_cost_weights({"Velocity": 0.15})
-print("Cost weights:", agent.get_cost_weights())
+    # reset data
+    mujoco.mj_resetData(model, data)
 
-# parameters
-agent.set_task_parameter("Goal", -1.0)
-print("Parameters:", agent.get_task_parameters())
+    # cache initial state
+    qpos[:, 0] = data.qpos
+    qvel[:, 0] = data.qvel
+    time[0] = data.time
 
-# %%
-# rollout horizon
-T = 1500
-
-# trajectories
-qpos = np.zeros((model.nq, T))
-qvel = np.zeros((model.nv, T))
-ctrl = np.zeros((model.nu, T - 1))
-# TODO(pculbert): add request for number of spline parameters.
-NUM_KNOT_POINTS = 10
-policy_parameters = np.zeros((model.nu, NUM_KNOT_POINTS, T - 1))
-time = np.zeros(T)
-
-# costs
-cost_total = np.zeros(T - 1)
-cost_terms = np.zeros((len(agent.get_cost_term_values()), T - 1))
-
-# rollout
-mujoco.mj_resetData(model, data)
-
-# cache initial state
-qpos[:, 0] = data.qpos
-qvel[:, 0] = data.qvel
-time[0] = data.time
-# frames
-frames = []
-FPS = 1.0 / model.opt.timestep
-dict_to_save = []
-
-# simulate
-NUM_TRAJ = 10
-
-for traj_id in range(NUM_TRAJ):
-
+    # Lists to save trajectory data
     positions = []
     vels = []
     spline_params = []
@@ -116,14 +74,12 @@ for traj_id in range(NUM_TRAJ):
         ctrl[:, t] = data.ctrl
 
         # set policy parameters
-        ### NEW BINDING ###
-        policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
-        ###################
+  #      policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
 
         # Append data to lists
         positions.append(data.qpos.copy())
         vels.append(data.qvel.copy())
-        spline_params.append(policy_parameters[:, :, t].copy())
+ #       spline_params.append(policy_parameters[:, :, t].copy())
         u.append(data.ctrl.copy())
 
         # get costs
@@ -139,69 +95,38 @@ for traj_id in range(NUM_TRAJ):
         qvel[:, t + 1] = data.qvel
         time[t + 1] = data.time
 
-        # render and save frames
-        renderer.update_scene(data)
-        pixels = renderer.render()
-        frames.append(pixels)
-
     # Save trajectory data
     torch.save({
         "pos": positions,
         "vel": vels,
-        "spline_params": spline_params,
+#        "spline_params": spline_params,
         "u": u
     }, f"trajectories/cartpole_traj_{traj_id}.pkl")
 
-    # reset
+    # Reset agent and perform garbage collection
     agent.reset()
+    agent.close()
+    gc.collect(0)
 
-#### NEW BINDING ####
-
-
-# # display video
-# SLOWDOWN = 0.5
-# media.show_video(frames, fps=SLOWDOWN * FPS)
-
-# # %%
-# # plot position
-# fig = plt.figure()
-
-# plt.plot(time, qpos[0, :], label="q0", color="blue")
-# plt.plot(time, qpos[1, :], label="q1", color="orange")
-
-# plt.legend()
-# plt.xlabel("Time (s)")
-# plt.ylabel("Configuration")
-
-# # %%
-# # plot velocity
-# fig = plt.figure()
-
-# plt.plot(time, qvel[0, :], label="v0", color="blue")
-# plt.plot(time, qvel[1, :], label="v1", color="orange")
-
-# plt.legend()
-# plt.xlabel("Time (s)")
-# plt.ylabel("Velocity")
-
-# # %%
-# # plot control
-# fig = plt.figure()
-
-# plt.plot(time[:-1], ctrl[0, :], color="blue")
-
-# plt.xlabel("Time (s)")
-# plt.ylabel("Control")
-
-# # %%
-# # plot costs
-# fig = plt.figure()
-
-# for i, c in enumerate(agent.get_cost_term_values().items()):
-#     plt.plot(time[:-1], cost_terms[i, :], label=c[0])
-
-# plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black")
-
-# plt.legend()
-# plt.xlabel("Time (s)")
-# plt.ylabel("Costs")
+# Main script execution
+if __name__ == "__main__":
+    # Model path
+    model_path = pathlib.Path(__file__).parent.parent.parent / "../../build/mjpc/tasks/cartpole/task.xml"
+    
+    # Number of trajectories
+    NUM_TRAJ = 4000
+    
+    # Rollout horizon
+    T = 1500
+    
+    # Number of spline parameters
+    NUM_KNOT_POINTS = 10
+    
+    # Create a process pool
+    processes = []
+    
+    for traj_id in range(NUM_TRAJ):
+        p = mp.Process(target=run_trajectory, args=(traj_id, T, NUM_KNOT_POINTS, model_path))
+        processes.append(p)
+        p.start()
+        p.join()
