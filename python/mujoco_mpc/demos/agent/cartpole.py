@@ -74,12 +74,12 @@ def run_trajectory(traj_id, T, NUM_KNOT_POINTS, model_path):
         ctrl[:, t] = data.ctrl
 
         # set policy parameters
-  #      policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
+        policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
 
         # Append data to lists
         positions.append(data.qpos.copy())
         vels.append(data.qvel.copy())
- #       spline_params.append(policy_parameters[:, :, t].copy())
+        spline_params.append(policy_parameters[:, :, t].copy())
         u.append(data.ctrl.copy())
 
         # get costs
@@ -99,7 +99,7 @@ def run_trajectory(traj_id, T, NUM_KNOT_POINTS, model_path):
     torch.save({
         "pos": positions,
         "vel": vels,
-#        "spline_params": spline_params,
+        "spline_params": spline_params,
         "u": u
     }, f"trajectories/cartpole_traj_{traj_id}.pkl")
 

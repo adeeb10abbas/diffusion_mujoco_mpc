@@ -107,7 +107,7 @@ policy.n_action_steps = 8
 
 inferred_actions = []
 
-for i in range(1, len(raw_dict["action"])//policy.n_action_steps):
+for i in range(0, len(raw_dict["action"])//policy.n_action_steps):
         obs_dict_sub = get_obs_dict(raw_dict, i*policy.n_action_steps, 2)
         # import pdb; pdb.set_trace()
         # obs_dict_torched = dict_apply(get_real_obs_dict(env_obs=obs_dict_sub, 
