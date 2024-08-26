@@ -11,8 +11,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 
-ckpt_path = "/home/ali/super_isolated/mujoco_mpc/diffusion_policy/data/outputs/2024.08.09/21.29.13_train_diffusion_unet_lowdim_mjpc_cartpole_dp_transformer/checkpoints/latest.ckpt"
-pkl_path = "/home/ali/super_isolated/mujoco_mpc/python/mujoco_mpc/demos/agent/trajectories/pkls/cartpole_traj_0.pkl"
+ckpt_path = "/home/ali/super_isolated/mujoco_mpc/diffusion_policy/data/outputs/2024.08.19/16.07.05_train_diffusion_unet_lowdim_mjpc_cartpole_dp_transformer/checkpoints/epoch=1150-train_action_mse_error=0.004.ckpt"
+pkl_path = "/home/ali/super_isolated/pkls/cartpole_traj_0.pkl"
 import matplotlib.pyplot as plt
 
 def load_pkl_obs(pkl_path):

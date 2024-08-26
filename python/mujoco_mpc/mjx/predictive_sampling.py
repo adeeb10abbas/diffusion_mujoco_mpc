@@ -23,6 +23,16 @@ from jax import numpy as jnp
 from mujoco import mjx
 from mujoco.mjx._src import dataclasses
 
+## Diffusion requirements 
+
+import torch
+import dill
+import hydra
+import scipy.spatial.transform as st
+
+from matplotlib.backends.backend_pdf import PdfPages
+from diffusion_policy.workspace.base_workspace import BaseWorkspace
+from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 
 CostFn = Callable[[mjx.Model, mjx.Data, Any], Tuple[jax.Array, Any]]
 
@@ -80,6 +90,42 @@ def get_actions(p: Planner, policy: jax.Array) -> jax.Array:
 
   return actions
 
+global_obs_dict = {}
+# lists of the shit I need 
+all_pos = []
+all_vels = []
+all_spline_params = []
+
+def give_me_obs_dict(num_of_obs: int):
+  # how do 
+  return None
+
+def load_diffusion_model(ckpt_path):
+  """
+  Loads the diffusion model and gets it ready for inference
+  """
+  payload = torch.load(open(ckpt_path, 'rb'), pickle_module=dill)
+  cfg = payload['cfg']
+  cls = hydra.utils.get_class(cfg._target_)
+  workspace = cls(cfg)
+  workspace: BaseWorkspace
+  workspace.load_payload(payload, exclude_keys=None, include_keys=None)
+
+  # diffusion model
+  d_policy: BaseLowdimPolicy
+  d_policy = workspace.model
+  if cfg.training.use_ema:
+      d_policy = workspace.ema_model
+
+  device = torch.device('cuda')
+  d_policy.eval().to(device)
+  return d_policy
+
+def sample_from_diffusion():
+  """
+  Uses the loaded model to sample from the diffusion model 
+  """
+  return None 
 
 def improve_policy(
     p: Planner,
@@ -96,6 +142,10 @@ def improve_policy(
   noise = (
       jax.random.normal(rng, (p.nsample, p.nspline, p.model.nu)) * p.noise_scale
   )
+  ## Save an observation dictionary
+  ## TODO(@ali) how to maintain an obs_dict?
+
+  ## TODO(@ali):Sample from diffusion policy above. 
   policies = jnp.concatenate((policy[None], policy + noise))
   # clamp actions to ctrlrange
   limit = p.model.actuator_ctrlrange

@@ -288,7 +288,7 @@ setuptools.setup(
         "grpcio",
         "matplotlib",
         "mediapy",
-        "mujoco >= 3.1.1",
+        "mujoco >= 3.2.1",
         "mujoco-mjx",
         "protobuf",
     ],
