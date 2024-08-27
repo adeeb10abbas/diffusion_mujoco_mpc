@@ -98,7 +98,7 @@ def reward(model: mujoco.MjModel, data: mujoco.MjData) -> float:
   p = 0.01
   position = data.sensor("position").data
   velocity = data.sensor("velocity").data
-  control = data.ctrl
+  control = data.ctrl[0]
 
   r_0 = smooth_abs_loss_norm(math.cos(position[0]) - 1, p = 0.01) # vertical 
   r_1 = smooth_abs_loss_norm(position[0], p = 0.1) # centered
