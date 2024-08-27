@@ -17,7 +17,10 @@ import matplotlib.pyplot as plt
 import mediapy as media
 import mujoco
 import numpy as np
+import os
 import pathlib
+
+os.environ["MUJOCO_GL"] = "glfw"
 
 # set current directory: mujoco_mpc/python/mujoco_mpc
 from mujoco_mpc import agent as agent_lib
@@ -26,10 +29,7 @@ from mujoco_mpc import agent as agent_lib
 
 # %%
 # model
-model_path = (
-    pathlib.Path(__file__).parent.parent.parent
-    / "../../build/mjpc/tasks/cartpole/task.xml"
-)
+model_path = pathlib.Path(__file__).parent.parent.parent / "../../build/mjpc/tasks/cartpole/task.xml"
 model = mujoco.MjModel.from_xml_path(str(model_path))
 
 # data
@@ -58,6 +58,9 @@ T = 1500
 qpos = np.zeros((model.nq, T))
 qvel = np.zeros((model.nv, T))
 ctrl = np.zeros((model.nu, T - 1))
+# TODO(pculbert): add request for number of spline parameters.
+NUM_KNOT_POINTS = 10
+policy_parameters = np.zeros((model.nu, NUM_KNOT_POINTS, T - 1))
 time = np.zeros(T)
 
 # costs
@@ -78,49 +81,59 @@ FPS = 1.0 / model.opt.timestep
 
 # simulate
 for t in range(T - 1):
-  if t % 100 == 0:
-    print("t = ", t)
+    if t % 100 == 0:
+        print("t = ", t)
 
-  # set planner state
-  agent.set_state(
-      time=data.time,
-      qpos=data.qpos,
-      qvel=data.qvel,
-      act=data.act,
-      mocap_pos=data.mocap_pos,
-      mocap_quat=data.mocap_quat,
-      userdata=data.userdata,
-  )
+    # set planner state
+    agent.set_state(
+        time=data.time,
+        qpos=data.qpos,
+        qvel=data.qvel,
+        act=data.act,
+        mocap_pos=data.mocap_pos,
+        mocap_quat=data.mocap_quat,
+        userdata=data.userdata,
+    )
 
-  # run planner for num_steps
-  num_steps = 10
-  for _ in range(num_steps):
-    agent.planner_step()
+    # run planner for num_steps
+    num_steps = 1
+    for _ in range(num_steps):
+        agent.planner_step()
 
-  # set ctrl from agent policy
-  data.ctrl = agent.get_action()
-  ctrl[:, t] = data.ctrl
+    # set ctrl from agent policy
+    data.ctrl = agent.get_action()
+    ctrl[:, t] = data.ctrl
 
-  # get costs
-  cost_total[t] = agent.get_total_cost()
-  for i, c in enumerate(agent.get_cost_term_values().items()):
-    cost_terms[i, t] = c[1]
+    # set policy parameters
+    ### NEW BINDING ###
+    policy_parameters[:, :, t] = agent.get_policy_parameters().reshape(model.nu, NUM_KNOT_POINTS)
+    ###################
 
-  # step
-  mujoco.mj_step(model, data)
+    # get costs
+    cost_total[t] = agent.get_total_cost()
+    for i, c in enumerate(agent.get_cost_term_values().items()):
+        cost_terms[i, t] = c[1]
 
-  # cache
-  qpos[:, t + 1] = data.qpos
-  qvel[:, t + 1] = data.qvel
-  time[t + 1] = data.time
+    # step
+    mujoco.mj_step(model, data)
 
-  # render and save frames
-  renderer.update_scene(data)
-  pixels = renderer.render()
-  frames.append(pixels)
+    # cache
+    qpos[:, t + 1] = data.qpos
+    qvel[:, t + 1] = data.qvel
+    time[t + 1] = data.time
+
+    # render and save frames
+    renderer.update_scene(data)
+    pixels = renderer.render()
+    frames.append(pixels)
+
+    # Store current poli
 
 # reset
 agent.reset()
+
+#### NEW BINDING ####
+
 
 # display video
 SLOWDOWN = 0.5
@@ -162,7 +175,7 @@ plt.ylabel("Control")
 fig = plt.figure()
 
 for i, c in enumerate(agent.get_cost_term_values().items()):
-  plt.plot(time[:-1], cost_terms[i, :], label=c[0])
+    plt.plot(time[:-1], cost_terms[i, :], label=c[0])
 
 plt.plot(time[:-1], cost_total, label="Total (weighted)", color="black")
 
